@@ -8,4 +8,6 @@ bevy = "0.17.2"
 
 [profile.release]
 codegen-units = 1
-lto = "thin"
+lto = "thin"    
+
+rand = "0.9"
