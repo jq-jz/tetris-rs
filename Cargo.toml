@@ -3,11 +3,18 @@ name = "tetris-rs"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "tetris"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tetris"
+path = "src/main.rs"
+
 [dependencies]
 bevy = "0.17.2"
+rand = "0.9"
 
 [profile.release]
 codegen-units = 1
-lto = "thin"    
-
-rand = "0.9"
+lto = "thin"
