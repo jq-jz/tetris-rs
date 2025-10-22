@@ -1,17 +1,11 @@
 use bevy::prelude::*;
+use tetris::*;
 
-mod components;
-mod constants;
-mod resources;
-mod tetromino;
-
-use components::*;
-use constants::*;
-use resources::*;
-use tetromino::*;
-
+/// 游戏入口函数
+/// 初始化 Bevy 应用程序，配置窗口、资源和系统
 fn main() {
     App::new()
+        // 添加默认插件，并配置窗口参数
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Tetris".to_string(),
@@ -20,26 +14,33 @@ fn main() {
             }),
             ..default()
         }))
-        .init_resource::<GameBoard>()
-        .init_resource::<GameState>()
-        .init_resource::<FallTimer>()
+        // 初始化游戏资源
+        .init_resource::<GameBoard>() // 游戏板资源
+        .init_resource::<GameState>() // 游戏状态资源
+        .init_resource::<FallTimer>() // 方块掉落计时器
+        // 添加启动系统（只执行一次）
         .add_systems(Startup, setup_game)
+        // 添加更新系统（每帧执行），按指定顺序链式执行
         .add_systems(
             Update,
             (
-                handle_player_input,
-                update_game_logic,
-                render_game,
-                update_ui,
+                handle_player_input, // 处理玩家输入（键盘）
+                update_game_logic,   // 更新游戏逻辑（下落、碰撞、消行等）
+                render_game,         // 渲染游戏（绘制方块、方块预览）
+                update_ui,           // 更新 UI（分数、游戏状态提示）
             )
-                .chain(),
+                .chain(), // 链式执行确保顺序
         )
         .run();
 }
 
+/// 初始化游戏场景
+/// 创建摄像头和 UI 文本元素（分数、游戏结束、暂停提示）
 fn setup_game(mut commands: Commands) {
+    // 创建 2D 摄像头
     commands.spawn(Camera2d);
 
+    // 创建分数显示文本（左上角）
     commands.spawn((
         Text::new("Score: 0"),
         TextFont {
@@ -55,178 +56,38 @@ fn setup_game(mut commands: Commands) {
         },
         UiText::Score,
     ));
-}
 
-fn handle_player_input(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut game_state: ResMut<GameState>,
-    board: Res<GameBoard>,
-) {
-    if let Some(piece) = game_state.current_piece {
-        let mut new_piece = piece;
+    // 创建游戏结束提示文本（中心）
+    commands.spawn((
+        Text::new(""),
+        TextFont {
+            font_size: 48.0,
+            ..default()
+        },
+        TextColor(Color::srgb(1.0, 0.2, 0.2)), // 红色
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(300.0),
+            left: Val::Px(250.0),
+            ..default()
+        },
+        UiText::GameOver,
+    ));
 
-        if keyboard.just_pressed(KeyCode::ArrowLeft) || keyboard.just_pressed(KeyCode::KeyA) {
-            new_piece.x -= 1;
-        } else if keyboard.just_pressed(KeyCode::ArrowRight) || keyboard.just_pressed(KeyCode::KeyD)
-        {
-            new_piece.x += 1;
-        } else if keyboard.just_pressed(KeyCode::ArrowDown) || keyboard.just_pressed(KeyCode::KeyS)
-        {
-            new_piece.y += 1;
-        } else if keyboard.just_pressed(KeyCode::ArrowUp) || keyboard.just_pressed(KeyCode::KeyW) {
-            new_piece.rotation = (new_piece.rotation + 1) % 4;
-        } else if keyboard.just_pressed(KeyCode::Space) {
-            while !new_piece.check_collision(0, 1, &board) {
-                new_piece.y += 1;
-            }
-        } else {
-            return;
-        }
-
-        if !new_piece.check_collision(0, 0, &board) {
-            game_state.current_piece = Some(new_piece);
-        }
-    }
-}
-
-fn update_game_logic(
-    time: Res<Time>,
-    mut timer: ResMut<FallTimer>,
-    mut game_state: ResMut<GameState>,
-    mut board: ResMut<GameBoard>,
-) {
-    timer.timer.tick(time.delta());
-
-    if timer.timer.just_finished() {
-        if let Some(ref mut piece) = game_state.current_piece {
-            if !piece.check_collision(0, 1, &board) {
-                piece.y += 1;
-            }
-        }
-    }
-
-    let should_lock = if let Some(ref piece) = game_state.current_piece {
-        piece.check_collision(0, 1, &board)
-    } else {
-        false
-    };
-
-    if should_lock {
-        if let Some(piece) = game_state.current_piece.take() {
-            let color = piece.tetromino_type.color();
-            for (x, y) in piece.blocks() {
-                if y >= 0 && y < GRID_HEIGHT as i32 && x >= 0 && x < GRID_WIDTH as i32 {
-                    board.set_cell(x as usize, y as usize, Some(color));
-                }
-            }
-        }
-    }
-
-    let mut lines_cleared = 0;
-    for y in (0..GRID_HEIGHT).rev() {
-        if board.is_line_full(y) {
-            board.clear_line(y);
-            lines_cleared += 1;
-            board.shift_lines_down(y);
-        }
-    }
-
-    if lines_cleared > 0 {
-        game_state.add_score(lines_cleared);
-    }
-
-    if game_state.current_piece.is_none() {
-        let new_piece = ActivePiece::new(game_state.next_piece);
-        game_state.current_piece = Some(new_piece);
-        game_state.next_piece = TetrominoType::random();
-    }
-}
-
-fn render_game(
-    mut commands: Commands,
-    query: Query<Entity, With<Block>>,
-    game_state: Res<GameState>,
-    board: Res<GameBoard>,
-) {
-    for entity in query.iter() {
-        commands.entity(entity).despawn();
-    }
-
-    for y in 0..GRID_HEIGHT {
-        for x in 0..GRID_WIDTH {
-            let (world_x, world_y) = grid_to_world(x as i32, y as i32);
-
-            commands.spawn((
-                Sprite {
-                    color: Color::srgb(0.1, 0.1, 0.1),
-                    custom_size: Some(Vec2::new(CELL_SIZE - 2.0, CELL_SIZE - 2.0)),
-                    ..default()
-                },
-                Transform::from_xyz(world_x, world_y, 0.0),
-                Block,
-            ));
-
-            if let Some(color) = board.cells[y][x] {
-                commands.spawn((
-                    Sprite {
-                        color,
-                        custom_size: Some(Vec2::new(CELL_SIZE - 4.0, CELL_SIZE - 4.0)),
-                        ..default()
-                    },
-                    Transform::from_xyz(world_x, world_y, 1.0),
-                    Block,
-                ));
-            }
-        }
-    }
-
-    if let Some(ref piece) = game_state.current_piece {
-        let color = piece.tetromino_type.color();
-        for (x, y) in piece.blocks() {
-            if y >= 0 && y < GRID_HEIGHT as i32 && x >= 0 && x < GRID_WIDTH as i32 {
-                let (world_x, world_y) = grid_to_world(x, y);
-
-                commands.spawn((
-                    Sprite {
-                        color,
-                        custom_size: Some(Vec2::new(CELL_SIZE - 4.0, CELL_SIZE - 4.0)),
-                        ..default()
-                    },
-                    Transform::from_xyz(world_x, world_y, 2.0),
-                    Block,
-                ));
-            }
-        }
-    }
-
-    let offset_x = -(GRID_WIDTH as f32) * CELL_SIZE / 2.0;
-    let offset_y = GRID_HEIGHT as f32 * CELL_SIZE / 2.0;
-    let preview_offset_x = offset_x + GRID_WIDTH as f32 * CELL_SIZE + 60.0;
-    let preview_offset_y = offset_y - 100.0;
-
-    let next_shape = game_state.next_piece.shape();
-    let next_color = game_state.next_piece.color();
-
-    for (dx, dy) in next_shape {
-        let world_x = preview_offset_x + dx as f32 * CELL_SIZE * 0.7;
-        let world_y = preview_offset_y - dy as f32 * CELL_SIZE * 0.7;
-
-        commands.spawn((
-            Sprite {
-                color: next_color,
-                custom_size: Some(Vec2::new(CELL_SIZE * 0.7 - 4.0, CELL_SIZE * 0.7 - 4.0)),
-                ..default()
-            },
-            Transform::from_xyz(world_x, world_y, 1.0),
-            Block,
-        ));
-    }
-}
-
-fn update_ui(game_state: Res<GameState>, mut query: Query<(&mut Text, &UiText)>) {
-    for (mut text, ui_type) in query.iter_mut() {
-        **text = match ui_type {
-            UiText::Score => format!("Score: {}", game_state.score),
-        };
-    }
+    // 创建暂停提示文本（中心上方）
+    commands.spawn((
+        Text::new(""),
+        TextFont {
+            font_size: 36.0,
+            ..default()
+        },
+        TextColor(Color::srgb(1.0, 1.0, 0.5)), // 黄色
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(250.0),
+            left: Val::Px(280.0),
+            ..default()
+        },
+        UiText::Pause,
+    ));
 }
