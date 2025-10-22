@@ -3,6 +3,11 @@ pub const GRID_HEIGHT: usize = 20;
 pub const CELL_SIZE: f32 = 30.0;
 pub const FALL_SPEED: f32 = 0.5;
 
+pub const SCORE_1_LINE: u32 = 100;
+pub const SCORE_2_LINES: u32 = 300;
+pub const SCORE_3_LINES: u32 = 500;
+pub const SCORE_4_LINES: u32 = 800;
+
 pub fn grid_to_world(x: i32, y: i32) -> (f32, f32) {
     let offset_x = -(GRID_WIDTH as f32) * CELL_SIZE / 2.0;
     let offset_y = GRID_HEIGHT as f32 * CELL_SIZE / 2.0;

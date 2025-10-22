@@ -100,6 +100,19 @@ fn update_game_logic(
         }
     }
 
+    let mut lines_cleared = 0;
+    for y in (0..GRID_HEIGHT).rev() {
+        if board.is_line_full(y) {
+            board.clear_line(y);
+            lines_cleared += 1;
+            board.shift_lines_down(y);
+        }
+    }
+
+    if lines_cleared > 0 {
+        game_state.add_score(lines_cleared);
+    }
+
     if game_state.current_piece.is_none() {
         let new_piece = ActivePiece::new(game_state.next_piece);
         game_state.current_piece = Some(new_piece);
