@@ -26,13 +26,35 @@ fn main() {
         .add_systems(Startup, setup_game)
         .add_systems(
             Update,
-            (handle_player_input, update_game_logic, render_game).chain(),
+            (
+                handle_player_input,
+                update_game_logic,
+                render_game,
+                update_ui,
+            )
+                .chain(),
         )
         .run();
 }
 
 fn setup_game(mut commands: Commands) {
     commands.spawn(Camera2d);
+
+    commands.spawn((
+        Text::new("Score: 0"),
+        TextFont {
+            font_size: 24.0,
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(20.0),
+            left: Val::Px(20.0),
+            ..default()
+        },
+        UiText::Score,
+    ));
 }
 
 fn handle_player_input(
@@ -175,5 +197,36 @@ fn render_game(
                 ));
             }
         }
+    }
+
+    let offset_x = -(GRID_WIDTH as f32) * CELL_SIZE / 2.0;
+    let offset_y = GRID_HEIGHT as f32 * CELL_SIZE / 2.0;
+    let preview_offset_x = offset_x + GRID_WIDTH as f32 * CELL_SIZE + 60.0;
+    let preview_offset_y = offset_y - 100.0;
+
+    let next_shape = game_state.next_piece.shape();
+    let next_color = game_state.next_piece.color();
+
+    for (dx, dy) in next_shape {
+        let world_x = preview_offset_x + dx as f32 * CELL_SIZE * 0.7;
+        let world_y = preview_offset_y - dy as f32 * CELL_SIZE * 0.7;
+
+        commands.spawn((
+            Sprite {
+                color: next_color,
+                custom_size: Some(Vec2::new(CELL_SIZE * 0.7 - 4.0, CELL_SIZE * 0.7 - 4.0)),
+                ..default()
+            },
+            Transform::from_xyz(world_x, world_y, 1.0),
+            Block,
+        ));
+    }
+}
+
+fn update_ui(game_state: Res<GameState>, mut query: Query<(&mut Text, &UiText)>) {
+    for (mut text, ui_type) in query.iter_mut() {
+        **text = match ui_type {
+            UiText::Score => format!("Score: {}", game_state.score),
+        };
     }
 }
