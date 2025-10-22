@@ -1,6 +1,7 @@
 pub const GRID_WIDTH: usize = 10;
 pub const GRID_HEIGHT: usize = 20;
 pub const CELL_SIZE: f32 = 30.0;
+pub const FALL_SPEED: f32 = 0.5;
 
 pub fn grid_to_world(x: i32, y: i32) -> (f32, f32) {
     let offset_x = -(GRID_WIDTH as f32) * CELL_SIZE / 2.0;

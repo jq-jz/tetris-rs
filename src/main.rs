@@ -22,13 +22,89 @@ fn main() {
         }))
         .init_resource::<GameBoard>()
         .init_resource::<GameState>()
+        .init_resource::<FallTimer>()
         .add_systems(Startup, setup_game)
-        .add_systems(Update, render_game)
+        .add_systems(
+            Update,
+            (handle_player_input, update_game_logic, render_game).chain(),
+        )
         .run();
 }
 
 fn setup_game(mut commands: Commands) {
     commands.spawn(Camera2d);
+}
+
+fn handle_player_input(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut game_state: ResMut<GameState>,
+    board: Res<GameBoard>,
+) {
+    if let Some(piece) = game_state.current_piece {
+        let mut new_piece = piece;
+
+        if keyboard.just_pressed(KeyCode::ArrowLeft) || keyboard.just_pressed(KeyCode::KeyA) {
+            new_piece.x -= 1;
+        } else if keyboard.just_pressed(KeyCode::ArrowRight) || keyboard.just_pressed(KeyCode::KeyD)
+        {
+            new_piece.x += 1;
+        } else if keyboard.just_pressed(KeyCode::ArrowDown) || keyboard.just_pressed(KeyCode::KeyS)
+        {
+            new_piece.y += 1;
+        } else if keyboard.just_pressed(KeyCode::ArrowUp) || keyboard.just_pressed(KeyCode::KeyW) {
+            new_piece.rotation = (new_piece.rotation + 1) % 4;
+        } else if keyboard.just_pressed(KeyCode::Space) {
+            while !new_piece.check_collision(0, 1, &board) {
+                new_piece.y += 1;
+            }
+        } else {
+            return;
+        }
+
+        if !new_piece.check_collision(0, 0, &board) {
+            game_state.current_piece = Some(new_piece);
+        }
+    }
+}
+
+fn update_game_logic(
+    time: Res<Time>,
+    mut timer: ResMut<FallTimer>,
+    mut game_state: ResMut<GameState>,
+    mut board: ResMut<GameBoard>,
+) {
+    timer.timer.tick(time.delta());
+
+    if timer.timer.just_finished() {
+        if let Some(ref mut piece) = game_state.current_piece {
+            if !piece.check_collision(0, 1, &board) {
+                piece.y += 1;
+            }
+        }
+    }
+
+    let should_lock = if let Some(ref piece) = game_state.current_piece {
+        piece.check_collision(0, 1, &board)
+    } else {
+        false
+    };
+
+    if should_lock {
+        if let Some(piece) = game_state.current_piece.take() {
+            let color = piece.tetromino_type.color();
+            for (x, y) in piece.blocks() {
+                if y >= 0 && y < GRID_HEIGHT as i32 && x >= 0 && x < GRID_WIDTH as i32 {
+                    board.set_cell(x as usize, y as usize, Some(color));
+                }
+            }
+        }
+    }
+
+    if game_state.current_piece.is_none() {
+        let new_piece = ActivePiece::new(game_state.next_piece);
+        game_state.current_piece = Some(new_piece);
+        game_state.next_piece = TetrominoType::random();
+    }
 }
 
 fn render_game(

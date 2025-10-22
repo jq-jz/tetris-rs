@@ -40,3 +40,16 @@ impl Default for GameState {
         }
     }
 }
+
+#[derive(Resource)]
+pub struct FallTimer {
+    pub timer: Timer,
+}
+
+impl Default for FallTimer {
+    fn default() -> Self {
+        Self {
+            timer: Timer::from_seconds(FALL_SPEED, TimerMode::Repeating),
+        }
+    }
+}
