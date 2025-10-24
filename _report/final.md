@@ -51,7 +51,7 @@
         ),
     )
     ```
-    这种顺序执行保证了：玩家输入先被处理 → 游戏逻辑基于最新输入更新 → 渲染反映最新状态。同时，由于 `handle_player_input` 和 `update_game_logic` 在同一帧中执行，玩家可以在方块即将锁定时进行最后的调整，创造了类似"Lock Delay"的容错空间。
+    这种顺序执行保证了：玩家输入先被处理 → 游戏逻辑基于最新输入更新 → 渲染反映最新状态。项目实现了经典的"Lock Delay"机制，方块触底后不会立即锁定，而是给予 0.2 秒的缓冲时间，允许玩家在最后一刻进行移动或旋转操作。
 
     **游戏主循环流程图:**
 
@@ -109,7 +109,7 @@
     ├── components.rs     # ECS 组件定义 (Block, UiText)
     ├── resources.rs      # 全局资源 (GameState, GameBoard, FallTimer)
     ├── tetromino.rs      # 方块类型与逻辑 (TetrominoType, ActivePiece)
-    ├── constants.rs      # 游戏常量与工具函数 (grid_to_world)
+    ├── constants.rs      # 游戏常量 (LOCK_DELAY, FALL_SPEED) 与工具函数
     └── systems/
         ├── mod.rs        # 系统模块导出
         ├── player_input.rs   # 玩家输入处理系统
@@ -264,21 +264,34 @@
     // constants.rs 中定义：pub const FALL_SPEED: f32 = 0.8;
     ```
 
-2. **方块锁定** (`handle_lock`)：当方块无法继续下落时，将其固定到游戏板上。
+2. **方块锁定** (`handle_lock`)：实现了经典的落地延迟机制，方块触底后给予 0.2 秒的缓冲时间。
     ```rust
-    let should_lock = if let Some(ref piece) = game_state.current_piece {
-        piece.check_collision(0, 1, board)  // 检查下一步是否碰撞
+    // 检查方块是否触底
+    let is_grounded = if let Some(ref piece) = game_state.current_piece {
+        piece.check_collision(0, 1, board)
     } else { false };
 
-    if should_lock {
-        if let Some(piece) = game_state.current_piece.take() {
-            for (x, y) in piece.blocks() {
-                if y < 0 { game_state.game_over = true; return; }
-                board.set_cell(x as usize, y as usize, Some(color));
+    if is_grounded {
+        // 累加锁定计时器
+        let elapsed = game_state.lock_timer.get_or_insert(0.0);
+        *elapsed += time.delta_secs();
+
+        // 计时器超过延迟时间，执行锁定
+        if *elapsed >= LOCK_DELAY {
+            if let Some(piece) = game_state.current_piece.take() {
+                for (x, y) in piece.blocks() {
+                    if y < 0 { game_state.game_over = true; return; }
+                    board.set_cell(x as usize, y as usize, Some(color));
+                }
             }
+            game_state.lock_timer = None;
         }
+    } else {
+        // 方块未触底，重置计时器
+        game_state.lock_timer = None;
     }
     ```
+    玩家在触底缓冲时间内移动方块，若移动后脱离触底状态，计时器会重置，允许继续操作。
 
 3. **消行与计分** (`handle_clear_lines`)：检查并清除满行，上方方块下移。
     ```rust
@@ -320,6 +333,7 @@ fn rotate_point(&self, x: i32, y: i32) -> (i32, i32) {
     | 方块旋转 | 按下上方向键 | 方块顺时针旋转90度，且不会穿墙 |
     | 硬降 | 按下空格键 | 方块立即下落并锁定在最底部 |
     | 软降 | 按下下方向键/S | 方块加速下落一格 |
+    | 落地延迟 | 方块触底后立即左右移动 | 方块不会立即锁定，可以在0.2秒内调整位置 |
     | 消行与计分 | 填满一行 | 该行被消除，上方方块下落，分数增加100分 |
     | 同时消多行 | 填满2/3/4行 | 分别得到300/500/800分 |
     | 游戏结束 | 方块堆叠到顶部 | 屏幕显示 "GAME OVER"，游戏逻辑停止 |
@@ -335,9 +349,10 @@ fn rotate_point(&self, x: i32, y: i32) -> (i32, i32) {
     | 需求等级 | 功能 | 实现状态 | 代码位置 |
     | :---: | :--- | :---: | :--- |
     | P0 | 方块移动、旋转、软降、硬降 | ✓ | `player_input.rs:54-73` |
-    | P0 | 方块自动下落与锁定 | ✓ | `game.rs:29-78` |
-    | P0 | 消行计分 | ✓ | `game.rs:80-101` |
-    | P0 | 游戏结束判断 | ✓ | `game.rs:69-71, 112-115` |
+    | P0 | 方块自动下落与锁定 | ✓ | `game.rs:54-85` |
+    | P0 | 落地延迟（Lock Delay） | ✓ | `game.rs:54-85, resources.rs:80` |
+    | P0 | 消行计分 | ✓ | `game.rs:87-101` |
+    | P0 | 游戏结束判断 | ✓ | `game.rs:72-75, 112-115` |
     | P1 | 分数显示 | ✓ | `main.rs:43-57` |
     | P1 | 下一个方块预览 | ✓ | `rendering.rs:79-106` |
     | P1 | 暂停/继续 | ✓ | `player_input.rs:23-25` |
@@ -368,7 +383,7 @@ fn rotate_point(&self, x: i32, y: i32) -> (i32, i32) {
 
     2.  **高级旋转**：实现"墙踢 (Wall Kick)"需要引入一套复杂的偏移检测规则（如 SRS 旋转系统），在旋转发生碰撞时，按预定规则尝试几个偏移位置。考虑到项目复杂度，本次实现中省略了该高级功能。
 
-    3.  **系统执行策略**：项目将系统放在元组中顺序执行，但 `handle_player_input` 和 `update_game_logic` 在同一帧内执行，创造了一个时间窗口：玩家可以在方块即将锁定的那一帧进行操作。这种设计意外地实现了类似"Lock Delay"的效果，允许玩家在方块触底瞬间进行微调，符合现代俄罗斯方块的游戏设计理念，提供了更好的容错空间。
+    3.  **落地延迟实现**：项目实现了经典的 Lock Delay 机制，通过在 `GameState` 中添加 `lock_timer: Option<f32>` 字段来追踪方块触底时间。当方块触底时启动计时器累加时间，计时器超过设定阈值（0.2秒）才真正锁定方块。如果玩家在延迟期间移动方块使其脱离触底状态，计时器会重置，允许继续操作。这种设计符合现代俄罗斯方块的游戏设计理念，提供了更好的容错空间，使得玩家能够在最后一刻调整方块位置。
 
 -   **待优化项与后续计划**：
     -   增加音效和背景音乐。

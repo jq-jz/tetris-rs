@@ -79,6 +79,10 @@ pub fn handle_player_input(
         if !new_piece.check_collision(0, 0, &board) {
             // 有效，更新当前方块
             game_state.current_piece = Some(new_piece);
+            // 如果移动后脱离触底状态，重置锁定计时器
+            if !new_piece.check_collision(0, 1, &board) {
+                game_state.lock_timer = None;
+            }
         }
         // 如果碰撞，则不更新方块位置（玩家操作被拒绝）
     }

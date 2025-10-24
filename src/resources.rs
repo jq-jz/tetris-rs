@@ -76,6 +76,8 @@ pub struct GameState {
     pub paused: bool,
     /// 7-Bag 随机系统的袋子（存储待发放的方块类型）
     bag: Vec<TetrominoType>,
+    /// 锁定延迟计时器（None表示未触底，Some(时间)表示已触底并计时）
+    pub lock_timer: Option<f32>,
 }
 
 impl Default for GameState {
@@ -87,6 +89,7 @@ impl Default for GameState {
             game_over: false,
             paused: false,
             bag: Vec::new(),
+            lock_timer: None,
         };
         // 使用 7-Bag 系统生成初始方块
         state.next_piece = state.next_from_bag();
@@ -103,6 +106,7 @@ impl GameState {
         self.current_piece = None;
         self.bag.clear();
         self.next_piece = self.next_from_bag();
+        self.lock_timer = None;
     }
 
     /// 从 7-Bag 系统中获取下一个方块

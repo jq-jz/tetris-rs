@@ -1,7 +1,7 @@
 // 游戏核心逻辑系统
 // 处理方块下落、碰撞、锁定、消行等核心游戏逻辑
 
-use crate::constants::GRID_HEIGHT;
+use crate::constants::{GRID_HEIGHT, LOCK_DELAY};
 use crate::resources::{FallTimer, GameBoard, GameState};
 use crate::tetromino::ActivePiece;
 use bevy::prelude::*;
@@ -21,7 +21,7 @@ pub fn update_game_logic(
 
     // 按顺序执行各个游戏逻辑阶段
     handle_fall(&time, &mut timer, &mut game_state, &board);
-    handle_lock(&mut game_state, &mut board);
+    handle_lock(&time, &mut game_state, &mut board);
     handle_clear_lines(&mut game_state, &mut board);
     handle_spawn(&mut game_state, &board);
 }
@@ -50,30 +50,37 @@ fn handle_fall(
 }
 
 /// 处理方块锁定
-/// 当方块无法继续下落时，将其固定在游戏板上
-fn handle_lock(game_state: &mut ResMut<GameState>, board: &mut ResMut<GameBoard>) {
-    // 检查当前方块是否会在下一步碰撞（无法继续下落）
-    let should_lock = if let Some(ref piece) = game_state.current_piece {
+/// 当方块无法继续下落时，启动延迟计时器，计时结束后将其固定在游戏板上
+fn handle_lock(time: &Res<Time>, game_state: &mut ResMut<GameState>, board: &mut ResMut<GameBoard>) {
+    // 检查当前方块是否触底（下一步会碰撞）
+    let is_grounded = if let Some(ref piece) = game_state.current_piece {
         piece.check_collision(0, 1, board)
     } else {
         false
     };
 
-    if should_lock {
-        // 取出当前方块
-        if let Some(piece) = game_state.current_piece.take() {
-            let color = piece.tetromino_type.color();
-            // 将方块的所有格子固定到游戏板上
-            for (x, y) in piece.blocks() {
-                // 如果方块的格子出现在屏幕顶部以上，游戏结束
-                if y < 0 {
-                    game_state.game_over = true;
-                    return;
+    if is_grounded {
+        // 方块触底，累加锁定计时器
+        let elapsed = game_state.lock_timer.get_or_insert(0.0);
+        *elapsed += time.delta_secs();
+
+        // 计时器超过延迟时间，执行锁定
+        if *elapsed >= LOCK_DELAY {
+            if let Some(piece) = game_state.current_piece.take() {
+                let color = piece.tetromino_type.color();
+                for (x, y) in piece.blocks() {
+                    if y < 0 {
+                        game_state.game_over = true;
+                        return;
+                    }
+                    board.set_cell(x as usize, y as usize, Some(color));
                 }
-                // 在游戏板上标记该格子已被占用
-                board.set_cell(x as usize, y as usize, Some(color));
             }
+            game_state.lock_timer = None;
         }
+    } else {
+        // 方块未触底，重置锁定计时器
+        game_state.lock_timer = None;
     }
 }
 
