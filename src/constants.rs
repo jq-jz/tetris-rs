@@ -7,7 +7,7 @@ pub const GRID_HEIGHT: usize = 20;
 /// 单个方块的像素大小
 pub const CELL_SIZE: f32 = 30.0;
 /// 方块掉落速度（秒）
-pub const FALL_SPEED: f32 = 0.5;
+pub const FALL_SPEED: f32 = 0.8;
 
 // 消行计分表
 /// 消一行的分数

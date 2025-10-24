@@ -74,17 +74,23 @@ pub struct GameState {
     pub game_over: bool,
     /// 游戏是否暂停
     pub paused: bool,
+    /// 7-Bag 随机系统的袋子（存储待发放的方块类型）
+    bag: Vec<TetrominoType>,
 }
 
 impl Default for GameState {
     fn default() -> Self {
-        Self {
+        let mut state = Self {
             current_piece: None,
-            next_piece: TetrominoType::random(),
+            next_piece: TetrominoType::I, // 临时值，下面会被覆盖
             score: 0,
             game_over: false,
             paused: false,
-        }
+            bag: Vec::new(),
+        };
+        // 使用 7-Bag 系统生成初始方块
+        state.next_piece = state.next_from_bag();
+        state
     }
 }
 
@@ -95,7 +101,33 @@ impl GameState {
         self.game_over = false;
         self.paused = false;
         self.current_piece = None;
-        self.next_piece = TetrominoType::random();
+        self.bag.clear();
+        self.next_piece = self.next_from_bag();
+    }
+
+    /// 从 7-Bag 系统中获取下一个方块
+    ///
+    /// 7-Bag 系统确保每 7 个方块中包含所有 7 种类型各一个，
+    /// 避免了完全随机可能导致的长时间不出现某种方块的问题
+    pub fn next_from_bag(&mut self) -> TetrominoType {
+        use rand::seq::SliceRandom;
+
+        // 如果袋子空了，重新填充所有 7 种方块并打乱
+        if self.bag.is_empty() {
+            self.bag = vec![
+                TetrominoType::I,
+                TetrominoType::O,
+                TetrominoType::T,
+                TetrominoType::S,
+                TetrominoType::Z,
+                TetrominoType::J,
+                TetrominoType::L,
+            ];
+            self.bag.shuffle(&mut rand::rng());
+        }
+
+        // 从袋子中取出一个方块
+        self.bag.pop().unwrap()
     }
 
     /// 根据消行数量增加分数

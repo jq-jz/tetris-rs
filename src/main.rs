@@ -20,7 +20,7 @@ fn main() {
         .init_resource::<FallTimer>() // 方块掉落计时器
         // 添加启动系统（只执行一次）
         .add_systems(Startup, setup_game)
-        // 添加更新系统（每帧执行），按指定顺序链式执行
+        // 添加更新系统
         .add_systems(
             Update,
             (
@@ -28,8 +28,7 @@ fn main() {
                 update_game_logic,   // 更新游戏逻辑（下落、碰撞、消行等）
                 render_game,         // 渲染游戏（绘制方块、方块预览）
                 update_ui,           // 更新 UI（分数、游戏状态提示）
-            )
-                .chain(), // 链式执行确保顺序
+            ),
         )
         .run();
 }

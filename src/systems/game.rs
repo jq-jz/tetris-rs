@@ -3,7 +3,7 @@
 
 use crate::constants::GRID_HEIGHT;
 use crate::resources::{FallTimer, GameBoard, GameState};
-use crate::tetromino::{ActivePiece, TetrominoType};
+use crate::tetromino::ActivePiece;
 use bevy::prelude::*;
 
 /// 游戏逻辑更新系统
@@ -117,7 +117,7 @@ fn handle_spawn(game_state: &mut ResMut<GameState>, board: &GameBoard) {
 
         // 方块成为当前活跃方块
         game_state.current_piece = Some(new_piece);
-        // 预先生成下一个随机方块
-        game_state.next_piece = TetrominoType::random();
+        // 使用 7-Bag 系统生成下一个方块
+        game_state.next_piece = game_state.next_from_bag();
     }
 }
